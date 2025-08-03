@@ -1,6 +1,6 @@
 [project]
 name = "cs336_basics"
-version = "1.0.3"
+version = "1.0.5"
 description = "CS336 Assignment 1"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,13 +18,16 @@ dependencies = [
     "torch~=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'", # Intel Macs
     "tqdm>=4.67.1",
     "wandb>=0.19.7",
+    "ty>=0.0.1a16",
 ]
 
+[build-system]
+requires = ["uv_build>=0.8.3,<0.9.0"]
+build-backend = "uv_build"
 
-
-[tool.setuptools.packages.find]
-include = ["cs336_basics"]
-
+[tool.uv.build-backend]
+module-name = "cs336_basics"
+module-root = ""
 
 [tool.uv]
 package = true
@@ -34,7 +37,6 @@ python-preference = "managed"
 log_cli = true
 log_cli_level = "WARNING"
 addopts = "-s"
-
 
 [tool.ruff]
 line-length = 120
