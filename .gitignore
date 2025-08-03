@@ -161,3 +161,10 @@ cython_debug/
 
 .ruff_cache/
 *.zip
+
+checkpoints
+trained_tokenizer
+wandb
+data
+profile
+.vscode

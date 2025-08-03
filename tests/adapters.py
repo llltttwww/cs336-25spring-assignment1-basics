@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import IO, Any, BinaryIO
 from collections.abc import Iterable
-from jaxtyping import Float, Int
+from jaxtyping import Float, Int, Bool
 
 import numpy.typing as npt
 import torch
@@ -30,7 +30,10 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
 
-    raise NotImplementedError
+    from .implementations.model import Linear
+    linear = Linear(d_in, d_out)
+    linear.load_state_dict({"weight":weights})
+    return linear(in_features)
 
 
 def run_embedding(
@@ -52,7 +55,10 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    from .implementations.model import Embedding
+    embedding=Embedding(vocab_size, d_model)
+    embedding.load_state_dict({"weight": weights})
+    return embedding(token_ids)
 
 
 def run_swiglu(
@@ -84,14 +90,18 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    
+    from .implementations.model import SwiGLU
+    swiglu=SwiGLU(d_model, d_ff)
+    swiglu.load_state_dict({"w1.weight":w1_weight,"w2.weight":w2_weight,"w3.weight":w3_weight})
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(
     Q: Float[Tensor, " ... queries d_k"],
     K: Float[Tensor, " ... keys d_k"],
     V: Float[Tensor, " ... values d_v"],
-    mask: Float[Tensor, " ... queries keys"] | None = None,
+    mask: Bool[Tensor, " ... queries keys"] | None = None,
 ) -> Float[Tensor, " ... queries d_v"]:
     """
     Given key (K), query (Q), and value (V) tensors, return
@@ -105,7 +115,9 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    
+    from .implementations.model import scaled_dot_product_attention
+    return scaled_dot_product_attention(Q, K, V, mask=mask)
 
 
 def run_multihead_self_attention(
@@ -139,7 +151,10 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    from .implementations.model import MultiHeadSelfAttention
+    mha=MultiHeadSelfAttention(d_model, num_heads)
+    mha.load_state_dict({"q_proj.weight": q_proj_weight,"k_proj.weight": k_proj_weight,"v_proj.weight": v_proj_weight,"output_proj.weight": o_proj_weight})
+    return mha(in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -179,7 +194,20 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    
+    from .implementations.model import MultiHeadSelfAttention
+    from .implementations.model import RotaryPositionEmbedding
+    mha= MultiHeadSelfAttention(d_model, num_heads, rope=RotaryPositionEmbedding(theta=theta, d_k=d_model // num_heads, max_seq_len=max_seq_len))
+    
+    mha.load_state_dict({
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "output_proj.weight": o_proj_weight
+    },strict=False)
+    # if token_positions is None:
+    #     token_positions = torch.arange(in_features.shape[-2], device=in_features.device).unsqueeze(0).expand(in_features.shape[:-1])
+    return mha(in_features, token_positions=token_positions)
 
 
 def run_rope(
@@ -201,7 +229,11 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    
+    from .implementations.model import RotaryPositionEmbedding
+    rope=RotaryPositionEmbedding(theta=theta,d_k=d_k,max_seq_len=max_seq_len)
+    
+    return rope(in_query_or_key,token_positions=token_positions)
 
 
 def run_transformer_block(
@@ -274,7 +306,11 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    
+    from .implementations.model import TransformerBlock
+    transformer_block=TransformerBlock(d_model,num_heads,d_ff,max_seq_len,theta)
+    transformer_block.load_state_dict(weights,strict=False)
+    return transformer_block(in_features)
 
 
 def run_transformer_lm(
@@ -356,8 +392,11 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
-
+    
+    from .implementations.model import TransformerLM
+    transformer_lm=TransformerLM(vocab_size=vocab_size, context_length=context_length, d_model=d_model, num_layers=num_layers, num_heads=num_heads, d_ff=d_ff, rope_theta=rope_theta)
+    transformer_lm.load_state_dict(weights, strict=False)
+    return transformer_lm(in_indices)
 
 def run_rmsnorm(
     d_model: int,
@@ -379,7 +418,10 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    from .implementations.model import RMSNorm
+    rmsnorm=RMSNorm(d_model, eps)
+    rmsnorm.load_state_dict({"weight": weights})
+    return rmsnorm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -416,7 +458,9 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    raise NotImplementedError
+    
+    from.implementations.dataset import get_batch
+    return get_batch(dataset, batch_size, context_length, device)
 
 
 def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
@@ -432,7 +476,8 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+    from .implementations.model import softmax
+    return softmax(in_features, dim=dim)
 
 
 def run_cross_entropy(inputs: Float[Tensor, " batch_size vocab_size"], targets: Int[Tensor, " batch_size"]) -> Float[Tensor, ""]:
@@ -448,7 +493,9 @@ def run_cross_entropy(inputs: Float[Tensor, " batch_size vocab_size"], targets: 
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    raise NotImplementedError
+    
+    from .implementations.utils import cross_entropy
+    return cross_entropy(inputs, targets)
 
 
 def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
@@ -460,14 +507,18 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    raise NotImplementedError
+    
+    from .implementations.optimizer import gradient_clipping
+    gradient_clipping(parameters, max_l2_norm)
 
 
 def get_adamw_cls() -> type[torch.optim.Optimizer]:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    raise NotImplementedError
+    
+    from .implementations.optimizer import Adamw
+    return Adamw
 
 
 def run_get_lr_cosine_schedule(
@@ -495,7 +546,9 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
-    raise NotImplementedError
+    
+    from .implementations.optimizer import learning_rate_scheduler
+    return learning_rate_scheduler(it,max_learning_rate,min_learning_rate,warmup_iters,cosine_cycle_iters)
 
 
 def run_save_checkpoint(
@@ -514,7 +567,9 @@ def run_save_checkpoint(
             we've completed.
         out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
     """
-    raise NotImplementedError
+    
+    from .implementations.serialization import save_checkpoint
+    save_checkpoint(model, optimizer, iteration, out)
 
 
 def run_load_checkpoint(
@@ -535,7 +590,9 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
-    raise NotImplementedError
+    
+    from .implementations.serialization import load_checkpoint
+    return load_checkpoint(src, model, optimizer)
 
 
 def get_tokenizer(
@@ -558,7 +615,181 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    raise NotImplementedError
+    from .implementations.tokenizer import Tokenizer
+    return Tokenizer(vocab,merges,special_tokens)
+
+
+
+
+
+
+import os
+from typing import BinaryIO
+from multiprocessing import Pool,cpu_count
+import regex as re
+from collections import defaultdict,Counter
+
+def find_chunk_boundaries(
+    file: BinaryIO, 
+    desired_num_chunks: int, 
+    split_special_token: bytes
+) -> list[int]:
+    """
+    Chunk the file into parts that can be counted independently.
+    May return fewer chunks if the boundaries end up overlapping.
+    """
+    assert isinstance(split_special_token, bytes), (
+        "Must represent special token as a bytestring"
+    )
+
+    # Get total file size in bytes
+    file.seek(0, os.SEEK_END)
+    file_size = file.tell()
+    file.seek(0)
+
+    chunk_size = file_size // desired_num_chunks
+
+    # Initial guesses for chunk boundary locations, uniformly spaced
+    # Chunks start on previous index, don't include last index
+    chunk_boundaries = [i * chunk_size for i in range(desired_num_chunks + 1)]
+    chunk_boundaries[-1] = file_size
+
+    mini_chunk_size = 4096  # Read ahead by 4k bytes at a time
+
+    for bi in range(1, len(chunk_boundaries) - 1):
+        initial_position = chunk_boundaries[bi]
+        file.seek(initial_position)  # Start at boundary guess
+        while True:
+            mini_chunk = file.read(mini_chunk_size)  # Read a mini chunk
+
+            # If EOF, this boundary should be at the end of the file
+            if mini_chunk == b"":
+                chunk_boundaries[bi] = file_size
+                break
+
+            # Find the special token in the mini chunk
+            found_at = mini_chunk.find(split_special_token)
+            if found_at != -1:
+                chunk_boundaries[bi] = initial_position + found_at
+                break
+            initial_position += mini_chunk_size
+
+    # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
+    return sorted(set(chunk_boundaries))
+
+def split_on_special_tokens(text:str,special_tokens:list[str])->list[str]:
+    pattern="|".join([re.escape(st)for st in special_tokens])
+    return re.split(f'{pattern}',text)
+
+def pretokenize_chunk(text:str,special_tokens:list[str],regex_pattern:str)->list[str]:
+    chunks=split_on_special_tokens(text,special_tokens)
+    tokens=[]
+    for chunk in chunks:
+        tokens.extend([pre_token.group() for pre_token in re.finditer(regex_pattern,chunk)])
+    return tokens
+
+def process_chunk_file(args):
+    file_path,start,end,special_tokens,regex_pattern=args
+    with open(file_path,'rb') as f:
+        f.seek(start)
+        chunk=f.read(end-start).decode('utf-8',errors='ignore')
+        return pretokenize_chunk(chunk,special_tokens,regex_pattern)
+
+def parallel_pretokenize_file(file_path:str,num_chunks:int,special_tokens:list[str],regex_pattern:str)->list[str]:
+    with open(file_path,'rb') as f:
+        boundaries=find_chunk_boundaries(f,num_chunks,special_tokens[0].encode('utf-8'))
+        chunk_args=[(file_path,start,end,special_tokens,regex_pattern) for start,end in zip(boundaries[:-1],boundaries[1:])]
+
+        with Pool(min(num_chunks,cpu_count())) as pool:
+            results=pool.map(process_chunk_file,chunk_args)
+    return [tok for sublist in results for tok in sublist]
+
+def merge_token(token:tuple[bytes,...],freq,new_symbol:tuple[bytes,bytes],iter_counter:defaultdict[int],pair_to_words:defaultdict[bytes,list],orig_token)->tuple[bytes,...]:
+    
+    # update according to old token
+    for i in range(len(token)-1):
+        a,b=token[i],token[i+1]
+        iter_counter[(a,b)]-=freq
+        if iter_counter[(a,b)]==0:
+            iter_counter.pop((a,b))
+        pair_to_words[a+b].discard(orig_token)
+        
+    # create new token
+    output=[]
+    i=0
+    while i < len(token):
+        if i<len(token)-1 and ((token[i],token[i+1]))==new_symbol:
+            output.append(b"".join(new_symbol))
+            i+=2
+        else:
+            output.append(token[i])
+            i+=1
+
+    # update according to new token
+    new_token=tuple(output)
+    for i in range(len(new_token)-1):
+        a,b=new_token[i],new_token[i+1]
+        iter_counter[(a,b)]+=freq
+        pair_to_words[a+b].add(orig_token)
+        
+    return new_token
+            
+    
+    
+        
+
+def train_bpe(tokens: list[str],spetial_tokens:list[str],vocab_size:int)-> tuple[dict[int,bytes],list[tuple[bytes,bytes]]]:
+    vocab_counter=Counter()
+    for token in tokens:
+        if token not in spetial_tokens:
+            token_encoded=token.encode('utf-8')  # Ensure token is encoded
+            vocab_counter[token_encoded]+=1
+    num_iteration=vocab_size-len(spetial_tokens)-256
+    vocab = {}
+    # 先加 special tokens
+    for i, token in enumerate(spetial_tokens):
+        vocab[i] = token.encode("utf-8")
+
+    # 然后加 byte-level vocab，从 len(special_tokens) 开始
+    offset = len(spetial_tokens)
+    for i in range(256):
+        vocab[offset + i] = bytes([i])
+    iter_counter=defaultdict(int)
+    iter_base = defaultdict(int)
+    for voc, freq in vocab_counter.items():
+        key = tuple([bytes([c]) for c in voc])
+        iter_base[key] = freq
+    pair_to_words=defaultdict(set)
+    merges=[]
+    orig_to_cur={}
+    for voc,freq in iter_base.items():
+        for i in range(len(voc)-1):
+            iter_counter[(voc[i],)+(voc[i+1],)]+=freq
+            pair_to_words[voc[i]+voc[i+1]].add(voc)
+        orig_to_cur.update({voc:voc})    
+    for i in range(num_iteration):
+        if len(iter_counter)==0:
+            break
+        most_common=max(iter_counter.items(),key=lambda x:(x[1],x[0]))
+        new_index=len(vocab)
+        new_vocab_tuple=most_common[0]
+        merges.append((new_vocab_tuple[0],new_vocab_tuple[1]))
+        new_vocab=b"".join(new_vocab_tuple)
+        vocab.update({new_index:new_vocab})
+        for orig_word in list(pair_to_words[new_vocab]):
+            word=orig_to_cur[orig_word]
+            freq=iter_base[word]
+            merged_word=merge_token(word,freq,new_vocab_tuple,iter_counter,pair_to_words,orig_word)
+            
+            iter_base[merged_word]+=iter_base[word]
+            iter_base.pop(word)
+            orig_to_cur[orig_word]=merged_word
+            if iter_counter[most_common[0]]==0:
+                iter_counter.pop(most_common[0])
+        
+        pair_to_words.pop(b"".join(most_common[0]))
+    return vocab, merges
+
 
 
 def run_train_bpe(
@@ -588,4 +819,14 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    regex_pattern=r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+    
+    tokens=parallel_pretokenize_file(
+        file_path=input_path,
+        num_chunks=16,
+        special_tokens=special_tokens,
+        regex_pattern=regex_pattern
+    )
+    
+    return train_bpe(tokens,special_tokens,vocab_size)
