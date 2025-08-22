@@ -68,7 +68,9 @@ class SwiGLU(nn.Module):
         x3=self.w3(x)
         xx=einsum(x1,x3,"... d_ff , ... d_ff -> ... d_ff")
         return self.w2(xx)
-    
+
+def silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
+    return in_features * torch.sigmoid(in_features)
 
 class RotaryPositionEmbedding(nn.Module):
     def __init__(self,theta:float,d_k:int,max_seq_len:int,device=None):

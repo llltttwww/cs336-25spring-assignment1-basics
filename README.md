@@ -1,5 +1,7 @@
-# CS336 Spring 2025 Assignment 1: Basics
+# CS336 Spring 2025 Assignment 1: Basics (All tests passed)
+Because of an oversight, all the implementations are not in `./cs336_basics`. Instead, they are in `./tests/implementations`. Still, run `uv run pytest` to test all implementations. However, due to relevant import in my implementation, please run code like `uv run -m tests.implementations.train` to avoid errors.
 
+# Original README content
 For a full description of the assignment, see the assignment handout at
 [cs336_spring2025_assignment1_basics.pdf](./cs336_spring2025_assignment1_basics.pdf)
 
